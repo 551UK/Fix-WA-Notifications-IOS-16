@@ -1,0 +1,59 @@
+name: Build FixWANotifs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Theos
+        uses: beerpiss/theos-action@v1
+        with:
+          theos-sdks: https://github.com/theos/sdks
+
+      - name: Build rootless DEB
+        shell: bash
+        run: |
+          echo "Looking for FixWANotifs project..."
+
+          PROJECT_DIR=""
+
+          while IFS= read -r MAKEFILE; do
+            if grep -q "TWEAK_NAME.*FixWANotifs" "$MAKEFILE"; then
+              PROJECT_DIR="$(dirname "$MAKEFILE")"
+              break
+            fi
+          done < <(find . -maxdepth 5 -type f -name Makefile)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Could not find the FixWANotifs Makefile."
+            echo "Files in repository:"
+            find . -maxdepth 4 -type f
+            exit 1
+          fi
+
+          echo "Found project at: $PROJECT_DIR"
+
+          cd "$PROJECT_DIR"
+
+          rm -rf packages
+          make clean
+          THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1
+
+          mkdir -p "$GITHUB_WORKSPACE/deb-output"
+          cp packages/*.deb "$GITHUB_WORKSPACE/deb-output/"
+
+      - name: Upload DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: FixWANotifs-Extended-DEB
+          path: deb-output/*.deb
+          if-no-files-found: error
