@@ -41,8 +41,15 @@ jobs:
           set -euo pipefail
 
           ZIP_FILE=$(find . -maxdepth 3 -type f \
-            -iname 'FixWANotifications16*.zip' \
+            -iname 'FixWANotifications16-v1.0.1.zip' \
             | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            ZIP_FILE=$(find . -maxdepth 3 -type f \
+              -iname 'FixWANotifications16*.zip' \
+              | sort -V \
+              | tail -n 1)
+          fi
 
           if [ -z "$ZIP_FILE" ]; then
             echo 'ERROR: No FixWANotifications16 ZIP was found in the repository.'
