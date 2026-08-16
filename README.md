@@ -1,4 +1,4 @@
-ADD THIS REPO TO SILEO TO DOWNLOAD THE DEB (EVEN IF IT SAYS INVALID): https://551uk.github.io/fix-wa-notifications-ios-16/
+ADD THIS REPO TO YOUR PACKAGE MANAGER TO DOWNLOAD THE DEB (EVEN IF IT SAYS INVALID): https://551uk.github.io/fix-wa-notifications-ios-16/
 
 This tweak raises the Jetsam memory limit of WhatsApp's notification ServiceExtension in order to fix missing notifications.
 
