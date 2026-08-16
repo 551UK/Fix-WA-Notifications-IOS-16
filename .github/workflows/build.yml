@@ -1,0 +1,337 @@
+name: Build FixWANotifs Extended v2
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Theos
+        uses: beerpiss/theos-action@v1
+        with:
+          theos-sdks: https://github.com/theos/sdks
+
+      - name: Extract source ZIP
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for FixWANotifs v2 ZIP..."
+
+          ZIP_FILE=$(find . -maxdepth 3 -type f \
+            -iname "FixWANotifs-Extended-Jetsam-v2.zip" \
+            | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Exact v2 filename not found."
+            echo "Trying any FixWANotifs ZIP..."
+
+            ZIP_FILE=$(find . -maxdepth 3 -type f \
+              -iname "FixWANotifs*.zip" \
+              | head -n 1)
+          fi
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No FixWANotifs ZIP found."
+            exit 1
+          fi
+
+          echo "Found ZIP:"
+          echo "$ZIP_FILE"
+
+          rm -rf build-source
+          mkdir -p build-source
+
+          unzip -o "$ZIP_FILE" -d build-source
+
+      - name: Find project
+        shell: bash
+        run: |
+          set -e
+
+          PROJECT_MAKEFILE=$(find build-source \
+            -type f \
+            -name Makefile \
+            -exec grep -l "TWEAK_NAME.*FixWANotifs" {} \; \
+            | head -n 1)
+
+          if [ -z "$PROJECT_MAKEFILE" ]; then
+            echo "ERROR: FixWANotifs Makefile not found."
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_MAKEFILE")
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Found project at:"
+          echo "$PROJECT_DIR"
+
+      - name: Verify v2 source
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Checking package version..."
+
+          grep -q "Version: 1.1.0+extended2" control || {
+            echo "ERROR: This is not extended2."
+            cat control
+            exit 1
+          }
+
+          echo "Checking Memory Limit page..."
+
+          grep -q "PSListItemsController" \
+            FixWANotifsPrefs/Resources/Root.plist || {
+            echo "ERROR: PSListItemsController is missing."
+            exit 1
+          }
+
+          echo "Checking extended limits..."
+
+          grep -q "<integer>128</integer>" \
+            FixWANotifsPrefs/Resources/Root.plist
+
+          grep -q "<integer>160</integer>" \
+            FixWANotifsPrefs/Resources/Root.plist
+
+          grep -q "<integer>192</integer>" \
+            FixWANotifsPrefs/Resources/Root.plist
+
+          grep -q "<integer>256</integer>" \
+            FixWANotifsPrefs/Resources/Root.plist
+
+          grep -q "case 128:" Tweak.x
+          grep -q "case 160:" Tweak.x
+          grep -q "case 192:" Tweak.x
+          grep -q "case 256:" Tweak.x
+
+          echo "Checking uninstall scripts..."
+
+          test -f layout/DEBIAN/postinst
+          test -f layout/DEBIAN/prerm
+          test -f layout/DEBIAN/postrm
+
+          chmod +x layout/DEBIAN/postinst
+          chmod +x layout/DEBIAN/prerm
+          chmod +x layout/DEBIAN/postrm
+
+          echo "Source verification passed."
+
+      - name: Clean build
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          rm -rf .theos
+          rm -rf packages
+
+          THEOS_PACKAGE_SCHEME=rootless make clean
+
+      - name: Build rootless package
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Building FixWANotifs Extended v2..."
+
+          THEOS_PACKAGE_SCHEME=rootless \
+          THEOS_PLATFORM_DEB_COMPRESSION_TYPE=gzip \
+          THEOS_PLATFORM_DEB_COMPRESSION_LEVEL=6 \
+          make package FINALPACKAGE=1
+
+          echo ""
+          echo "Generated packages:"
+
+          find packages -type f -name "*.deb" -print
+
+      - name: Verify DEB
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          DEB=$(find packages -type f -name "*.deb" | head -n 1)
+
+          if [ -z "$DEB" ]; then
+            echo "ERROR: No .deb generated."
+            exit 1
+          fi
+
+          echo "========================================"
+          echo "Checking DEB"
+          echo "========================================"
+          echo "$DEB"
+
+          echo ""
+          echo "DEB archive members:"
+
+          MEMBERS=$(ar t "$DEB")
+          echo "$MEMBERS"
+
+          echo "$MEMBERS" | grep -q "^debian-binary$" || {
+            echo "ERROR: debian-binary missing."
+            exit 1
+          }
+
+          echo "$MEMBERS" | grep -q "^control.tar.gz$" || {
+            echo "ERROR: control.tar.gz missing."
+            exit 1
+          }
+
+          echo "$MEMBERS" | grep -q "^data.tar.gz$" || {
+            echo "ERROR: data.tar.gz missing."
+            exit 1
+          }
+
+          echo ""
+          echo "Main DEB structure is valid."
+
+          echo ""
+          echo "========================================"
+          echo "Extracting control archive"
+          echo "========================================"
+
+          TEMP_DIR=$(mktemp -d)
+
+          mkdir -p "$TEMP_DIR/control"
+
+          ar p "$DEB" control.tar.gz \
+            > "$TEMP_DIR/control.tar.gz"
+
+          tar -xzf "$TEMP_DIR/control.tar.gz" \
+            -C "$TEMP_DIR/control"
+
+          echo ""
+          echo "Control archive contains:"
+
+          find "$TEMP_DIR/control" \
+            -maxdepth 2 \
+            -type f \
+            -print
+
+          echo ""
+          echo "========================================"
+          echo "Checking package metadata"
+          echo "========================================"
+
+          CONTROL_FILE=$(find "$TEMP_DIR/control" \
+            -type f \
+            -name control \
+            | head -n 1)
+
+          if [ -z "$CONTROL_FILE" ]; then
+            echo "ERROR: control metadata missing."
+            exit 1
+          fi
+
+          cat "$CONTROL_FILE"
+
+          grep -q "^Package: com.0xkuj.fixwanotifs" \
+            "$CONTROL_FILE" || {
+            echo "ERROR: Wrong package ID."
+            exit 1
+          }
+
+          grep -q "^Version: 1.1.0+extended2" \
+            "$CONTROL_FILE" || {
+            echo "ERROR: Wrong package version."
+            exit 1
+          }
+
+          echo ""
+          echo "========================================"
+          echo "Checking uninstall scripts"
+          echo "========================================"
+
+          POSTRM=$(find "$TEMP_DIR/control" \
+            -type f \
+            -name postrm \
+            | head -n 1)
+
+          PRERM=$(find "$TEMP_DIR/control" \
+            -type f \
+            -name prerm \
+            | head -n 1)
+
+          POSTINST=$(find "$TEMP_DIR/control" \
+            -type f \
+            -name postinst \
+            | head -n 1)
+
+          if [ -z "$POSTRM" ]; then
+            echo "ERROR: postrm is missing from finished DEB."
+            exit 1
+          fi
+
+          if [ -z "$PRERM" ]; then
+            echo "ERROR: prerm is missing from finished DEB."
+            exit 1
+          fi
+
+          if [ -z "$POSTINST" ]; then
+            echo "ERROR: postinst is missing from finished DEB."
+            exit 1
+          fi
+
+          echo "postinst: FOUND"
+          echo "prerm:    FOUND"
+          echo "postrm:   FOUND"
+
+          echo ""
+          echo "Contents of prerm:"
+          cat "$PRERM"
+
+          echo ""
+          echo "Contents of postrm:"
+          cat "$POSTRM"
+
+          echo ""
+          echo "========================================"
+          echo "Checking payload archive"
+          echo "========================================"
+
+          mkdir -p "$TEMP_DIR/data"
+
+          ar p "$DEB" data.tar.gz \
+            > "$TEMP_DIR/data.tar.gz"
+
+          tar -tzf "$TEMP_DIR/data.tar.gz" \
+            | head -n 100
+
+          echo ""
+          echo "========================================"
+          echo "DEB VERIFICATION PASSED"
+          echo "========================================"
+
+          mkdir -p "$GITHUB_WORKSPACE/deb-output"
+
+          cp "$DEB" "$GITHUB_WORKSPACE/deb-output/"
+
+          echo ""
+          echo "Finished package:"
+
+          ls -lh "$GITHUB_WORKSPACE/deb-output/"
+
+      - name: Upload DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: FixWANotifs-Extended-v2-DEB
+          path: deb-output/*.deb
+          if-no-files-found: error
