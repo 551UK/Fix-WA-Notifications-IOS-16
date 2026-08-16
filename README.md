@@ -1,6 +1,6 @@
-ADD THIS REPO TO YOUR PACKAGE MANAGER TO DOWNLOAD THE DEB (EVEN IF IT SAYS INVALID): https://551uk.github.io/fix-wa-notifications-ios-16/
-
 Tweak name = FixWANotications16
+
+ADD THIS REPO TO YOUR PACKAGE MANAGER TO DOWNLOAD THE DEB (EVEN IF IT SAYS INVALID): https://551uk.github.io/fix-wa-notifications-ios-16/
 
 --------------------------------------------------------------------------------
 
