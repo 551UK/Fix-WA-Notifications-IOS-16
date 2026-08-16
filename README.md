@@ -6,4 +6,4 @@ While using my 12 Pro Max on IOS 16.2 (Dopamine 2.0) and my XS Max on 16.3.1 (Do
 
 It seems on older model iphones on IOS 16 the memory usage is higher for what ever reason so i have made this tweak to fix WhatsApp notifications. The 112MB should be enough for everyone.
 
->> All credit goes to 0xkuj i just edited his tweak for my usage case - his original tweak is here: https://github.com/0xkuj/FixWANotifs <<
+> All credit goes to 0xkuj i just edited his tweak for my usage case - his original tweak is here: https://github.com/0xkuj/FixWANotifs <
