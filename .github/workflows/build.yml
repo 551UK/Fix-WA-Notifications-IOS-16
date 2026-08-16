@@ -1,0 +1,87 @@
+name: Build FixWANotifs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install Theos
+        uses: beerpiss/theos-action@v1
+        with:
+          theos-sdks: https://github.com/theos/sdks
+
+      - name: Extract and build rootless DEB
+        shell: bash
+        run: |
+          set -e
+
+          echo "Files currently in repository:"
+          find . -maxdepth 2 -type f
+
+          ZIP_FILE=$(find . -maxdepth 2 -type f -iname "FixWANotifs*.zip" | head -n 1)
+
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Found ZIP: $ZIP_FILE"
+            rm -rf build-source
+            mkdir build-source
+            unzip -o "$ZIP_FILE" -d build-source
+          else
+            echo "No FixWANotifs ZIP found - assuming source is already extracted."
+          fi
+
+          PROJECT_MAKEFILE=""
+
+          while IFS= read -r MAKEFILE; do
+            if grep -q "TWEAK_NAME.*FixWANotifs" "$MAKEFILE"; then
+              PROJECT_MAKEFILE="$MAKEFILE"
+              break
+            fi
+          done < <(
+            find . \
+              -path "./theos" -prune -o \
+              -path "./.git" -prune -o \
+              -type f -name Makefile -print
+          )
+
+          if [ -z "$PROJECT_MAKEFILE" ]; then
+            echo "ERROR: FixWANotifs project still could not be found."
+            echo "Repository files:"
+            find . -maxdepth 5 -type f
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_MAKEFILE")
+
+          echo "Found FixWANotifs project:"
+          echo "$PROJECT_DIR"
+
+          cd "$PROJECT_DIR"
+
+          echo "Starting Theos build..."
+
+          rm -rf packages
+          make clean
+
+          THEOS_PACKAGE_SCHEME=rootless \
+          make package FINALPACKAGE=1
+
+          echo "Build completed."
+
+          mkdir -p "$GITHUB_WORKSPACE/deb-output"
+          cp packages/*.deb "$GITHUB_WORKSPACE/deb-output/"
+
+      - name: Upload DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: FixWANotifs-Extended-DEB
+          path: deb-output/*.deb
+          if-no-files-found: error
