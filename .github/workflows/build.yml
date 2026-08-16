@@ -1,4 +1,4 @@
-name: Build FixWANotifs Extended v2
+name: Build FixWANotifications16
 
 on:
   workflow_dispatch:
@@ -23,14 +23,7 @@ jobs:
         shell: bash
         run: |
           set -e
-
-          brew update
           brew install dpkg
-
-          echo "dpkg-deb location:"
-          which dpkg-deb
-
-          echo "dpkg-deb version:"
           dpkg-deb --version
 
       - name: Extract source ZIP
@@ -39,29 +32,19 @@ jobs:
           set -e
 
           ZIP_FILE=$(find . -maxdepth 3 -type f \
-            -iname "FixWANotifs-Extended-Jetsam-v2.zip" \
+            -iname "FixWANotifications16*.zip" \
             | head -n 1)
 
           if [ -z "$ZIP_FILE" ]; then
-            ZIP_FILE=$(find . -maxdepth 3 -type f \
-              -iname "FixWANotifs*.zip" \
-              | head -n 1)
-          fi
-
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: No FixWANotifs ZIP found."
+            echo "ERROR: No FixWANotifications16 ZIP found."
             exit 1
           fi
 
-          echo "Found ZIP:"
-          echo "$ZIP_FILE"
-
           rm -rf build-source
           mkdir -p build-source
-
           unzip -o "$ZIP_FILE" -d build-source
 
-      - name: Find project
+      - name: Locate project
         shell: bash
         run: |
           set -e
@@ -69,41 +52,37 @@ jobs:
           PROJECT_MAKEFILE=$(find build-source \
             -type f \
             -name Makefile \
-            -exec grep -l "TWEAK_NAME.*FixWANotifs" {} \; \
+            -exec grep -l "TWEAK_NAME.*FixWANotifications16" {} \; \
             | head -n 1)
 
           if [ -z "$PROJECT_MAKEFILE" ]; then
-            echo "ERROR: FixWANotifs Makefile not found."
+            echo "ERROR: FixWANotifications16 Makefile not found."
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$PROJECT_MAKEFILE")
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
 
-          echo "Found project:"
-          echo "$PROJECT_DIR"
-
-      - name: Verify v2 source
+      - name: Verify source
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
-          grep -q "Version: 1.1.0+extended2" control || {
-            echo "ERROR: Wrong source version."
-            cat control
-            exit 1
-          }
+          grep -q '^Package: com.0xkuj.fixwanotifications16$' control
+          grep -q '^Name: FixWANotifications16$' control
+          grep -q '^Version: 1.0.0$' control
 
-          grep -q "PSListItemsController" \
-            FixWANotifsPrefs/Resources/Root.plist
+          grep -q 'case 112:' Tweak.x
+          grep -q 'case 128:' Tweak.x
 
-          grep -q "case 128:" Tweak.x
-          grep -q "case 160:" Tweak.x
-          grep -q "case 192:" Tweak.x
-          grep -q "case 256:" Tweak.x
+          ! grep -q 'case 160:' Tweak.x
+          ! grep -q 'case 192:' Tweak.x
+          ! grep -q 'case 256:' Tweak.x
+
+          grep -q '<integer>112</integer>' FixWANotifications16Prefs/Resources/Root.plist
+          grep -q '<integer>128</integer>' FixWANotifications16Prefs/Resources/Root.plist
 
           test -f layout/DEBIAN/postinst
           test -f layout/DEBIAN/prerm
@@ -113,23 +92,16 @@ jobs:
           chmod +x layout/DEBIAN/prerm
           chmod +x layout/DEBIAN/postrm
 
-          echo "Source checks passed."
+          echo "Source verification passed."
 
-      - name: Build with real dpkg-deb
+      - name: Build rootless DEB
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
-          rm -rf .theos
-          rm -rf packages
-
-          echo "Cleaning..."
+          rm -rf .theos packages
           THEOS_PACKAGE_SCHEME=rootless make clean
-
-          echo ""
-          echo "Building using Debian dpkg-deb..."
 
           THEOS_PACKAGE_SCHEME=rootless \
           THEOS_PLATFORM_DEB_COMPRESSION_TYPE=gzip \
@@ -137,86 +109,37 @@ jobs:
           make package FINALPACKAGE=1 \
           _THEOS_PLATFORM_DPKG_DEB="$(which dpkg-deb)"
 
-          echo ""
-          echo "Generated package:"
+          find packages -type f -name '*.deb' -print
 
-          find packages -type f -name "*.deb" -print
-
-      - name: Validate with dpkg-deb
+      - name: Validate DEB
         shell: bash
         run: |
           set -e
-
           cd "$PROJECT_DIR"
 
-          DEB=$(find packages -type f -name "*.deb" | head -n 1)
+          DEB=$(find packages -type f -name '*.deb' | head -n 1)
 
           if [ -z "$DEB" ]; then
-            echo "ERROR: No DEB generated."
+            echo "ERROR: No .deb generated."
             exit 1
           fi
 
-          echo "========================================"
-          echo "VALIDATING DEB WITH DEBIAN DPKG-DEB"
-          echo "========================================"
-
-          echo ""
-          echo "Package:"
-          echo "$DEB"
-
-          echo ""
-          echo "Package metadata:"
           dpkg-deb --info "$DEB"
 
-          echo ""
-          echo "Package contents:"
-          dpkg-deb --contents "$DEB"
-
-          echo ""
-          echo "Testing extraction..."
-
           TEST_DIR=$(mktemp -d)
-
           dpkg-deb --extract "$DEB" "$TEST_DIR/data"
           dpkg-deb --control "$DEB" "$TEST_DIR/control"
 
-          echo ""
-          echo "Control files:"
-          find "$TEST_DIR/control" -type f -maxdepth 1 -print
-
-          test -f "$TEST_DIR/control/control" || {
-            echo "ERROR: control file missing."
-            exit 1
-          }
-
-          test -f "$TEST_DIR/control/prerm" || {
-            echo "ERROR: prerm missing."
-            exit 1
-          }
-
-          test -f "$TEST_DIR/control/postrm" || {
-            echo "ERROR: postrm missing."
-            exit 1
-          }
-
-          echo ""
-          echo "prerm: FOUND"
-          echo "postrm: FOUND"
-
-          echo ""
-          echo "========================================"
-          echo "DPKG-DEB VALIDATION PASSED"
-          echo "========================================"
+          test -f "$TEST_DIR/control/control"
+          test -f "$TEST_DIR/control/prerm"
+          test -f "$TEST_DIR/control/postrm"
 
           mkdir -p "$GITHUB_WORKSPACE/deb-output"
-
           cp "$DEB" "$GITHUB_WORKSPACE/deb-output/"
-
-          ls -lh "$GITHUB_WORKSPACE/deb-output/"
 
       - name: Upload DEB
         uses: actions/upload-artifact@v4
         with:
-          name: FixWANotifs-Extended-v2-DPKG
+          name: FixWANotifications16-DEB
           path: deb-output/*.deb
           if-no-files-found: error
