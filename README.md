@@ -13,4 +13,4 @@ It seems on older model iphones on IOS 16 the memory usage is higher for what ev
 
 --------------------------------------------------------------------------------
 
-All credit goes to 0xkuj i just edited his tweak for my usage case - his original tweak is here: https://github.com/0xkuj/FixWANotifs 
+All credit goes to 0xkuj i just edited his tweak for my usage case - his tweak is here: https://github.com/0xkuj/FixWANotifs 
